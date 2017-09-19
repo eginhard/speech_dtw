@@ -13,6 +13,8 @@ Contact: h.kamper@sms.ed.ac.uk
 Date: 2014
 """
 
+import matplotlib
+matplotlib.use('Agg')
 from scipy.spatial.distance import pdist
 import argparse
 import datetime
@@ -25,66 +27,92 @@ import sys
 #                              SAMEDIFF FUNCTIONS                             #
 #-----------------------------------------------------------------------------#
 
-def average_precision(pos_distances, neg_distances, show_plot):
+def average_precision(swsp_distances, swdp_distances, dw_distances, show_plot):
     """
     Calculate average precision and precision-recall breakeven.
 
     Return the average precision and precision-recall breakeven calculated
-    using the true positive distances `pos_distances` and true negative
-    distances `neg_distances`.
+    using the same-word same-speaker distances `swsp_distances`, same-word
+    different-speaker distances `swdp_distances` and true negative
+    distances `dw_distances`.
     """
-    distances = np.concatenate([pos_distances, neg_distances])
-    matches = np.concatenate([np.ones(len(pos_distances)), np.zeros(len(neg_distances))])
+    distances = np.concatenate([swsp_distances, swdp_distances, dw_distances])
+    sw_matches = np.concatenate([np.ones(len(swsp_distances)),
+                                 np.ones(len(swdp_distances)),
+                                 np.zeros(len(dw_distances))])
+    swdp_matches = np.concatenate([np.zeros(len(swsp_distances)),
+                                   np.ones(len(swdp_distances)),
+                                   np.zeros(len(dw_distances))])
 
     # Sort from shortest to longest distance
     sorted_i = np.argsort(distances)
     distances = distances[sorted_i]
-    matches = matches[sorted_i]
+    sw_matches = sw_matches[sorted_i]
+    swdp_matches = swdp_matches[sorted_i]
 
     # Calculate precision
-    precision = np.cumsum(matches)/np.arange(1, len(matches) + 1)
+    sw_precision = np.cumsum(sw_matches)/np.arange(1, len(sw_matches) + 1)
+    sw_precision2 = np.cumsum(sw_matches)/np.arange(1, len(sw_matches) + 1)
 
     # Calculate average precision: the multiplication with matches and division
     # by the number of positive examples is to not count precisions at the same
     # recall point multiple times.
-    average_precision = np.sum(precision * matches) / len(pos_distances)
+    sw_average_precision = np.sum(sw_precision * sw_matches) / (
+        len(swsp_distances) + len(swdp_distances))
+    average_precision = np.sum(sw_precision * swdp_matches) / len(swdp_distances)
 
     # Calculate recall
-    recall = np.cumsum(matches)/len(pos_distances)
+    sw_recall = np.cumsum(sw_matches)/(len(swsp_distances) + len(swdp_distances))
+    swdp_recall = np.cumsum(swdp_matches)/len(swdp_distances)
 
     # More than one precision can be at a single recall point, take the max one
-    for n in range(len(recall) - 2, -1, -1):
-        precision[n] = max(precision[n], precision[n + 1])
+    for n in range(len(sw_recall) - 2, -1, -1):
+        sw_precision[n] = max(sw_precision[n], sw_precision[n + 1])
+    for n in range(len(swdp_recall) - 2, -1, -1):
+        sw_precision2[n] = max(sw_precision2[n], sw_precision2[n + 1])
 
     # Calculate precision-recall breakeven
-    prb_i = np.argmin(np.abs(recall - precision))
-    prb = (recall[prb_i] + precision[prb_i])/2.
+    sw_prb_i = np.argmin(np.abs(sw_recall - sw_precision))
+    sw_prb = (sw_recall[sw_prb_i] + sw_precision[sw_prb_i])/2.
+    swdp_prb_i = np.argmin(np.abs(swdp_recall - sw_precision2))
+    swdp_prb = (swdp_recall[swdp_prb_i] + sw_precision2[swdp_prb_i])/2.
 
+    show_plot = True
     if show_plot:
-        plt.plot(recall, precision)
+        plt.plot(swdp_recall, sw_precision2)
         plt.xlabel("Recall")
         plt.ylabel("Precision")
+        #plt.savefig("/afs/inf.ed.ac.uk/user/s16/s1680167/pr_utd3.png", format='png')
 
-    return average_precision, prb
+    return average_precision, sw_average_precision, swdp_prb, sw_prb
 
 
-def generate_matches_array(labels):
+def generate_matches_array(labels, speakers=[]):
     """
     Return an array of bool in the same order as the distances from
     `scipy.spatial.distance.pdist` indicating whether a distance is for
     matching or non-matching labels.
     """
     N = len(labels)
-    matches = np.zeros(N*(N - 1)/2, dtype=np.bool)
+    word_matches = np.zeros(N*(N - 1)/2, dtype=np.bool)
+    speaker_matches = None
 
     # For every distance, mark whether it is a true match or not
     cur_matches_i = 0
     for n in range(N):
         cur_label = labels[n]
-        matches[cur_matches_i:cur_matches_i + (N - n) - 1] = np.asarray(labels[n + 1:]) == cur_label
+        word_matches[cur_matches_i:cur_matches_i + (N - n) - 1] = np.asarray(labels[n + 1:]) == cur_label
         cur_matches_i += N - n - 1
 
-    return matches
+    if speakers != [] and len(speakers) == len(labels):
+        speaker_matches = np.zeros(N*(N - 1)/2, dtype=np.bool)
+        cur_matches_i = 0
+        for n in range(N):
+            cur_speaker = speakers[n]
+            speaker_matches[cur_matches_i:cur_matches_i + (N - n) - 1] = np.asarray(speakers[n + 1:]) == cur_speaker
+            cur_matches_i += N - n - 1
+
+    return word_matches, speaker_matches
 
 
 def fixed_dim(X, labels, metric="cosine", show_plot=False):
@@ -134,7 +162,11 @@ def main():
     args = check_argv()
 
     # Read labels
-    labels = [i.strip() for i in open(args.labels_fn)]
+    labels = [i.strip().split()[0] for i in open(args.labels_fn)]
+    try:
+        speakers = [i.strip().split()[1] for i in open(args.labels_fn)]
+    except IndexError:
+        speakers = []
     N = len(labels)
 
     # Read distances
@@ -159,10 +191,16 @@ def main():
 
     # Calculate average precision
     print "Calculating statistics."
-    matches = generate_matches_array(labels)
-    ap, prb = average_precision(distances_vec[matches == True], distances_vec[matches == False], False)
-    print "Average precision:", ap
-    print "Precision-recall breakeven:", prb
+    word_matches, speaker_matches = generate_matches_array(labels, speakers)
+    ap, sw_ap, prb, sw_prb = average_precision(
+        distances_vec[np.logical_and(word_matches, speaker_matches)],
+        distances_vec[np.logical_and(word_matches, speaker_matches == False)],
+        distances_vec[word_matches == False],
+        False)
+    print "SWDP Average precision:", ap
+    print "SWDP Precision-recall breakeven:", prb
+    print "SW Average precision:", sw_ap
+    print "SW Precision-recall breakeven:", sw_prb
     print "End time: " + str(datetime.datetime.now())
 
 

@@ -14,6 +14,7 @@ def read_kaldi_ark(ark_fn):
     """Read a Kaldi archive (in text format) and return it in a dict."""
     ark_dict = {}
     lines = open(ark_fn).readlines()
+    cur_mat = []
     for line in lines:
         line = line.strip(" \n")
         if line[-1] == "[":

@@ -59,18 +59,29 @@ def check_argv():
         help="normalize features per frame before calculating DTWs (default is not to normalize)"
         )
     parser.set_defaults(normalize_feats=False)
+    parser.add_argument(
+        "--only", default="", type=str, choices=["", "same", "diff"],
+        help="calculate costs only for same/diff-speaker pairs (default is not to do this)"
+        )
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
     return parser.parse_args()
 
 
-def read_pairs(pairs_fn):
+def read_pairs(pairs_fn, only=False):
     """Return a list of tuples with pairs of utterance IDs."""
     pairs = []
     for line in open(pairs_fn):
         utt_1, utt_2 = line.split()
-        pairs.append((utt_1, utt_2))
+
+        speaker1 = utt_1.split("###")[1].split("_")[0]
+        speaker2 = utt_2.split("###")[1].split("_")[0]
+
+        if ((only == "same" and speaker1 == speaker2) or
+            (only == "diff" and speaker1 != speaker2) or
+            only == ""):
+            pairs.append((utt_1, utt_2))
     return pairs
 
 
@@ -85,6 +96,7 @@ def main():
     features_fn = args.features_fn
     distances_fn = args.distances_fn
     normalize_feats = args.normalize_feats
+    only = args.only
 
     if args.metric == "cosine":
         dtw_cost_func = _dtw.multivariate_dtw_cost_cosine
@@ -97,7 +109,7 @@ def main():
     # Read the pairs and the archive
     print "Start time: " + str(datetime.datetime.now())
     print "Reading pairs from:", pairs_fn
-    pairs = read_pairs(pairs_fn)
+    pairs = read_pairs(pairs_fn, only)
     print "Reading features from:", features_fn
     if args.input_fmt == "kaldi_txt":
         ark = read_kaldi_ark(features_fn)

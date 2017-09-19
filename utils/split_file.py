@@ -60,7 +60,7 @@ def main():
     basename, extension = path.splitext(path.split(input_fn)[-1])
 
     # Write lines to split files
-    i_split = 1
+    i_split = 0
     n_cur_lines = 0
     fn_cur = path.join(output_dir, basename + "." + str(i_split) + extension)
     f_cur = open(fn_cur, "w")
