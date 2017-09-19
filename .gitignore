@@ -3,6 +3,7 @@
 !.*
 !*.py
 !*.pyx
-!*.rst
+!*.ipynb
+!*.md
 !Makefile
-doc/
+*-checkpoint.ipynb
