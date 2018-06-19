@@ -20,6 +20,7 @@ import argparse
 import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import sys
 
 
@@ -27,7 +28,8 @@ import sys
 #                              SAMEDIFF FUNCTIONS                             #
 #-----------------------------------------------------------------------------#
 
-def average_precision(swsp_distances, swdp_distances, dw_distances, show_plot):
+def average_precision(swsp_distances, swdp_distances, dw_distances, show_plot,
+                      distances_fn=''):
     """
     Calculate average precision and precision-recall breakeven.
 
@@ -77,12 +79,16 @@ def average_precision(swsp_distances, swdp_distances, dw_distances, show_plot):
     swdp_prb_i = np.argmin(np.abs(swdp_recall - sw_precision2))
     swdp_prb = (swdp_recall[swdp_prb_i] + sw_precision2[swdp_prb_i])/2.
 
-    show_plot = True
     if show_plot:
-        plt.plot(swdp_recall, sw_precision2)
+        fig, ax = plt.subplots()
+        ax.plot(swdp_recall, sw_precision2)
+        ax.plot(sw_recall, sw_precision)
         plt.xlabel("Recall")
         plt.ylabel("Precision")
-        #plt.savefig("/afs/inf.ed.ac.uk/user/s16/s1680167/pr_utd3.png", format='png')
+        #plt.show()
+        if distances_fn != '':
+            fig.savefig("/afs/inf.ed.ac.uk/user/e/ehermann/zero/reports/utd-sdtw/figures/pr-" +
+                        os.path.basename(distances_fn) + ".png", format='png')
 
     return average_precision, sw_average_precision, swdp_prb, sw_prb
 
@@ -196,7 +202,7 @@ def main():
         distances_vec[np.logical_and(word_matches, speaker_matches)],
         distances_vec[np.logical_and(word_matches, speaker_matches == False)],
         distances_vec[word_matches == False],
-        False)
+        True, args.distances_fn)
     print "SWDP Average precision:", ap
     print "SWDP Precision-recall breakeven:", prb
     print "SW Average precision:", sw_ap

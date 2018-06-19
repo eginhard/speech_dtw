@@ -75,8 +75,15 @@ def read_pairs(pairs_fn, only=False):
     for line in open(pairs_fn):
         utt_1, utt_2 = line.split()
 
-        speaker1 = utt_1.split("###")[1].split("_")[0]
-        speaker2 = utt_2.split("###")[1].split("_")[0]
+        if 'buckeye' in pairs_fn:
+            speaker1 = utt_1.split('###')[1][:3]
+            speaker2 = utt_2.split('###')[1][:3]
+        elif 'xitsonga' in pairs_fn:
+            speaker1 = utt_1.split('###')[1].split('_')[2][:3]
+            speaker2 = utt_2.split('###')[1].split('_')[2][:3]
+        else:
+            speaker1 = utt_1.split("###")[1].split("_")[0]
+            speaker2 = utt_2.split("###")[1].split("_")[0]
 
         if ((only == "same" and speaker1 == speaker2) or
             (only == "diff" and speaker1 != speaker2) or
